@@ -1,4 +1,5 @@
 import SideNav from "../ui/dashboard/sidenav";
+import { ThemeProvider } from 'next-themes';
 
 export default function Layout({children}: { children: React.ReactNode; }) {
     return (
