@@ -5,6 +5,10 @@ import { sql } from '@vercel/postgres';
 import { revalidatePath } from 'next/cache';
 import { redirect } from 'next/navigation';
 
+//connect the auth logic with your login form
+import { signIn } from '@/auth';
+import { AuthError } from 'next-auth';
+
 
 // Validate and prepare the data. Type validation and coercion
 const FormSchema = z.object( {
@@ -157,5 +161,26 @@ export async function deleteInvoice ( id: string )
         return {
             message: 'Database Error: Failed to Delete Invoice.'
         };
+    }
+}
+
+
+//Updating the login form
+export async function authenticate(
+    prevState: string | undefined,
+    formData: FormData,
+) {
+    try {
+        await signIn('credentials', formData);
+    } catch (error) {
+        if (error instanceof AuthError) {
+            switch (error.type) {
+                case 'CredentialsSignin':
+                    return 'Invalid credentials.';
+                default:
+                    return 'Something went wrong.';
+            }
+        }
+        throw error;
     }
 }
