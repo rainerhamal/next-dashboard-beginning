@@ -9,10 +9,16 @@ import { redirect } from 'next/navigation';
 // Validate and prepare the data. Type validation and coercion
 const FormSchema = z.object( {
     id: z.string(),
-    customerId: z.string(),
-    amount: z.coerce.number(),
+    customerId: z.string( {
+        invalid_type_error: 'Please select a customer',
+    } ),
+    amount: z.coerce.number().gt( 0, {
+        message: 'Please enter an amount greater than $0.'
+    } ),
     date: z.string(),
-    status: z.enum( [ 'pending', 'paid' ] ),
+    status: z.enum( [ 'pending', 'paid' ], {
+        invalid_type_error: 'Please select an invoice status.'
+    } ),
 } );
 
 const CreateInvoice = FormSchema.omit( { id: true, date: true } )
@@ -30,21 +36,45 @@ const UpdateInvoice = FormSchema.omit( { id: true, date: true } );
 //     console.log(rawFormData)
 
 // pass your rawFormData to CreateInvoice to validate the types:
-export async function createInvoice ( formData: FormData )
+
+// update your createInvoice action to accept two parameters:
+// This is temporary until @types/react-dom is updated
+export type State = {
+    errors?: {
+        customerId?: string[];
+        amount?: string[];
+        status?: string[];
+    };
+    message?: string | null;
+}
+
+export async function createInvoice ( prevState: State, formData: FormData )
 {
-    const { customerId, amount, status } = CreateInvoice.parse( {
+    // Validate form using Zod
+    const validatedFields = CreateInvoice.safeParse( {
         customerId: formData.get( 'customerId' ),
         amount: formData.get( 'amount' ),
         status: formData.get( 'status' ),
     } );
 
+    // return console.log(validatedFields) = { success: false, error: [Getter] }
+    // If form validation fails, return errors early. Otherwise, continue.
+    if ( !validatedFields.success )
+    {
+        return {
+            errors: validatedFields.error.flatten().fieldErrors,
+            message: 'Missing Fields. Failed to Create Invoice.',
+        };
+    }
+
+    // Prepare data for insertion into the database:
+    const { customerId, amount, status } = validatedFields.data;
     // Storing values in cents. It's usually good practice to store monetary values in cents in your database to eliminate JavaScript floating-point errors and ensure greater accuracy.
     const amountInCents = amount * 100;
-
     // Creating new dates
     const date = new Date().toISOString().split( 'T' )[ 0 ];
 
-
+    // Insert data into the database
     try
     {
         // Inserting the data into your database
@@ -54,29 +84,40 @@ export async function createInvoice ( formData: FormData )
     }
     catch ( error )
     {
+        // If a database error occurs, return a more specific error.
         return {
             message: 'Database Error: Failed to Create Invoice.'
         };
     }
 
-    // Revalidate and redirect
+    // Revalidate the cache for the invoices page and redirect the user.
     revalidatePath( '/dashboard/invoices' );
-
-    // redirect the user back to the /dashboard/invoices page
     redirect( '/dashboard/invoices' );
 }
 
 
 // Update Invoice
-export async function updateInvoice ( id: string, formData: FormData )
+export async function updateInvoice ( id: string, prevState: State, formData: FormData )
 {
-    const { customerId, amount, status } = UpdateInvoice.parse( {
+    const validatedFields = UpdateInvoice.safeParse( {
         customerId: formData.get( 'customerId' ),
         amount: formData.get( 'amount' ),
         status: formData.get( 'status' ),
     } );
 
+    //If form validation fails, return errors early. Otherwise, continue.
+    if ( !validatedFields.success )
+    {
+        return {
+            errors: validatedFields.error.flatten().fieldErrors,
+            message: 'Missing Fields. Failed to Update Invoice.'
+        }
+    }
+
+    //Prepare data for update into the database:
+    const { customerId, amount, status } = validatedFields.data;
     const amountInCents = amount * 100;
+
 
     try
     {
@@ -102,8 +143,8 @@ export async function updateInvoice ( id: string, formData: FormData )
 export async function deleteInvoice ( id: string )
 {
     //simulate an error:
-    throw new Error('Failed to Delete Invoice');
-    
+    throw new Error( 'Failed to Delete Invoice' );
+
     try
     {
         // Deleting the data from your database
@@ -114,7 +155,7 @@ export async function deleteInvoice ( id: string )
     catch ( error )
     {
         return {
-            message: 'Database Error: Failed to Update Invoice.'
+            message: 'Database Error: Failed to Delete Invoice.'
         };
     }
 }
